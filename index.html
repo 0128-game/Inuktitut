@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>イヌクティトゥット・ブロック・ビルダー</title>
+    <style>
+        :root { --c-bg: #e0f7fa; --v-bg: #fce4ec; --p-bg: #fff9c4; --accent: #00acc1; }
+        body { font-family: sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 15px; }
+        .card { background: white; width: 100%; max-width: 550px; padding: 20px; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        
+        .preview-box { font-size: 100px; text-align: center; height: 140px; line-height: 140px; background: #fafafa; border: 3px dashed #ddd; border-radius: 15px; margin-bottom: 20px; transition: transform 0.3s ease; }
+        
+        .row { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border-radius: 12px; margin-bottom: 10px; position: relative; }
+        .label { position: absolute; top: -8px; left: 10px; font-size: 11px; background: white; padding: 0 5px; color: #888; border: 1px solid #eee; border-radius: 4px; }
+        
+        .cho-row { background: var(--c-bg); }
+        .jung-row { background: var(--v-bg); }
+        .jong-row { background: var(--p-bg); }
+
+        .block { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .block.active { background: var(--accent); color: white; transform: scale(1.1); }
+
+        .display { font-size: 40px; border-bottom: 3px solid var(--accent); min-height: 55px; margin: 20px 0 10px; word-break: break-all; }
+        .result-info { display: flex; justify-content: space-between; min-height: 24px; margin-bottom: 15px; }
+        
+        .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.2s; }
+        .btn-add { background: #37474f; color: white; grid-column: span 2; }
+        .btn-add:hover { background: #263238; }
+        .btn-del { background: #eee; color: #333; grid-column: span 2; }
+        
+        .guide { font-size: 12px; color: #666; margin-top: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="preview-box" id="preview">ᐄ</div>
+    
+    <div class="row cho-row" id="cho-area"><span class="label">基本子音 (Base)</span></div>
+    <div class="row jung-row" id="jung-area"><span class="label">母音による変形 (Vowel)</span></div>
+    <div class="row jong-row" id="jong-area"><span class="label">末尾子音 (Finals)</span></div>
+
+    <div class="btns">
+        <button class="btn-add" onclick="add()">文字を確定</button>
+        <button class="btn-del" onclick="del()">1文字消す</button>
+    </div>
+
+    <div class="display" id="out-text"></div>
+    <div class="result-info">
+        <div id="out-romaji" style="color: #666; font-style: italic;"></div>
+    </div>
+    
+    <div class="guide">※母音の選択で文字が回転・反転します</div>
+</div>
+
+<script>
+// イヌクティトゥット音節文字マップ
+// [母音なし/独立, ai, i, u, a]
+const SYLLABLES = [
+    { name: "Vowel Only", chars: ["", "ᐄ", "ᐃ", "ᐅ", "ᐊ"], roms: ["", "ii", "i", "u", "a"] },
+    { name: "P", chars: ["ᑉ", "ᐅ", "ᐱ", "ᐳ", "ᐸ"], roms: ["p", "pii", "pi", "pu", "pa"] },
+    { name: "T", chars: ["ᑦ", "ᑏ", "ᑎ", "ᑐ", "ᑕ"], roms: ["t", "tii", "ti", "tu", "ta"] },
+    { name: "K", chars: ["ᒃ", "ᑮ", "ᑭ", "ᑯ", "ᑲ"], roms: ["k", "kii", "ki", "ku", "ka"] },
+    { name: "G", chars: ["ᒡ", "ᒌ", "ᒋ", "ᒍ", "ᒐ"], roms: ["g", "gii", "gi", "gu", "ga"] },
+    { name: "M", chars: ["ᒻ", "ᒦ", "ᒥ", "ᒧ", "ᒪ"], roms: ["m", "mii", "mi", "mu", "ma"] },
+    { name: "N", chars: ["ᓐ", "ᓃ", "ᓂ", "ᓄ", "ᓇ"], roms: ["n", "nii", "ni", "nu", "na"] },
+    { name: "S", chars: ["ᔅ", "ᓰ", "ᓯ", "ᓱ", "ᓴ"], roms: ["s", "sii", "si", "su", "sa"] },
+    { name: "L", chars: ["ᓪ", "ᓖ", "ᓕ", "ᓗ", "ᓚ"], roms: ["l", "lii", "li", "lu", "la"] },
+    { name: "J", chars: ["ᔾ", "ᔩ", "ᔨ", "ᔪ", "ᔭ"], roms: ["j", "jii", "ji", "ju", "ja"] },
+    { name: "V", chars: ["ᕝ", "ᕖ", "ᕕ", "ᕗ", "ᕙ"], roms: ["v", "vii", "vi", "vu", "va"] },
+    { name: "R", chars: ["ᕐ", "ᕇ", "ᕆ", "ᕈ", "ᕋ"], roms: ["r", "rii", "ri", "ru", "ra"] },
+    { name: "Q", chars: ["ᖅ", "ᖄ", "ᑭ", "ᑯ", "ᑲ"], roms: ["q", "qii", "qi", "qu", "qa"] }, // Qは特殊だが簡易化
+    { name: "NG", chars: ["ᖕ", "ᖲ", "ᖏ", "ᖑ", "ᖓ"], roms: ["ng", "ngii", "ngi", "ngu", "nga"] }
+];
+
+const V_LABELS = ["なし", "ii (ai)", "i", "u", "a"];
+
+let cIdx = 0, vIdx = 1;
+let stack = [];
+
+function init() {
+    const choArea = document.getElementById('cho-area');
+    SYLLABLES.forEach((s, i) => {
+        const b = createBlock(s.name === "Vowel Only" ? "V" : s.name, () => {
+            cIdx = i;
+            updateActive('cho-area', i);
+            update();
+        });
+        if(i === 0) b.classList.add('active');
+        choArea.appendChild(b);
+    });
+
+    const jungArea = document.getElementById('jung-area');
+    V_LABELS.forEach((v, i) => {
+        if(i === 0) return; // Finalは別枠
+        const b = createBlock(v, () => {
+            vIdx = i;
+            updateActive('jung-area', i-1);
+            update();
+        });
+        if(i === 1) b.classList.add('active');
+        jungArea.appendChild(b);
+    });
+
+    const jongArea = document.getElementById('jong-area');
+    SYLLABLES.forEach((s, i) => {
+        if(i === 0) return;
+        const b = createBlock(s.chars[0], () => {
+            addFinal(s.chars[0], s.roms[0]);
+        });
+        jongArea.appendChild(b);
+    });
+
+    update();
+}
+
+function createBlock(text, onClick) {
+    const b = document.createElement('div');
+    b.className = 'block';
+    b.innerText = text;
+    b.onclick = onClick;
+    return b;
+}
+
+function updateActive(areaId, idx) {
+    const area = document.getElementById(areaId);
+    area.querySelectorAll('.block').forEach((b, i) => {
+        b.classList.toggle('active', i === idx);
+    });
+}
+
+function update() {
+    const char = SYLLABLES[cIdx].chars[vIdx];
+    const preview = document.getElementById('preview');
+    preview.innerText = char || " ";
+    
+    // アニメーション効果（回転する感覚を出す）
+    preview.style.transform = `rotate(${vIdx * 90 - 90}deg)`;
+}
+
+function add() {
+    const char = SYLLABLES[cIdx].chars[vIdx];
+    const rom = SYLLABLES[cIdx].roms[vIdx];
+    if(!char) return;
+    stack.push({ char, rom });
+    render();
+}
+
+function addFinal(char, rom) {
+    stack.push({ char, rom });
+    render();
+}
+
+function del() {
+    stack.pop();
+    render();
+}
+
+function render() {
+    const outText = document.getElementById('out-text');
+    const outRomaji = document.getElementById('out-romaji');
+    outText.innerText = stack.map(s => s.char).join("");
+    outRomaji.innerText = stack.map(s => s.rom).join("-");
+}
+
+init();
+</script>
+</body>
+</html>
